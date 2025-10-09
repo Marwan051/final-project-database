@@ -179,11 +179,92 @@ UPDATE ON route_stop FOR EACH ROW EXECUTE FUNCTION trg_route_stop_set_updated_at
 -- FROM route_geometry rg
 -- WHERE rg.geom_22992 && ST_Expand(ST_Transform(ST_SetSRID(ST_MakePoint(lon, lat), 4326), 22992), 100)
 --   AND ST_DWithin(rg.geom_22992, ST_Transform(ST_SetSRID(ST_MakePoint(lon, lat),4326),22992), 100);
--- 6) maintenance recommendations (comments)
+-- 6) ways and ways_vertices_pgr tables (for routing graph)
+-- These tables store the road network graph for routing calculations
+-- ways_vertices_pgr stores the vertices (intersections/nodes)
+CREATE TABLE IF NOT EXISTS ways_vertices_pgr (
+    id BIGSERIAL PRIMARY KEY,
+    osm_id BIGINT UNIQUE,
+    eout INTEGER,
+    lon NUMERIC(11, 8),
+    lat NUMERIC(11, 8),
+    cnt INTEGER,
+    chk INTEGER,
+    ein INTEGER,
+    the_geom geometry(Point, 4326),
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+-- ways stores the road segments (edges) connecting vertices
+CREATE TABLE IF NOT EXISTS ways (
+    gid BIGSERIAL PRIMARY KEY,
+    osm_id BIGINT,
+    tag_id INTEGER,
+    length DOUBLE PRECISION,
+    length_m DOUBLE PRECISION,
+    name TEXT,
+    source BIGINT NOT NULL REFERENCES ways_vertices_pgr(id),
+    target BIGINT NOT NULL REFERENCES ways_vertices_pgr(id),
+    source_osm BIGINT REFERENCES ways_vertices_pgr(osm_id),
+    target_osm BIGINT REFERENCES ways_vertices_pgr(osm_id),
+    cost DOUBLE PRECISION,
+    reverse_cost DOUBLE PRECISION,
+    cost_s DOUBLE PRECISION,
+    reverse_cost_s DOUBLE PRECISION,
+    rule TEXT,
+    one_way INTEGER,
+    oneway TEXT,
+    x1 DOUBLE PRECISION,
+    y1 DOUBLE PRECISION,
+    x2 DOUBLE PRECISION,
+    y2 DOUBLE PRECISION,
+    maxspeed_forward DOUBLE PRECISION,
+    maxspeed_backward DOUBLE PRECISION,
+    priority DOUBLE PRECISION DEFAULT 1,
+    the_geom geometry(LineString, 4326),
+    attrs JSONB DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+-- indexes for ways_vertices_pgr
+CREATE INDEX IF NOT EXISTS idx_ways_vertices_pgr_geom_gist ON ways_vertices_pgr USING GIST (the_geom);
+CREATE INDEX IF NOT EXISTS idx_ways_vertices_pgr_osm_id ON ways_vertices_pgr (osm_id)
+WHERE osm_id IS NOT NULL;
+-- indexes for ways
+CREATE INDEX IF NOT EXISTS idx_ways_geom_gist ON ways USING GIST (the_geom);
+CREATE INDEX IF NOT EXISTS idx_ways_source ON ways (source);
+CREATE INDEX IF NOT EXISTS idx_ways_target ON ways (target);
+CREATE INDEX IF NOT EXISTS idx_ways_source_osm ON ways (source_osm)
+WHERE source_osm IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_ways_target_osm ON ways (target_osm)
+WHERE target_osm IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_ways_attrs_gin ON ways USING GIN (attrs);
+CREATE INDEX IF NOT EXISTS idx_ways_name ON ways (name)
+WHERE name IS NOT NULL;
+-- triggers to keep updated_at fresh for ways_vertices_pgr
+CREATE OR REPLACE FUNCTION trg_ways_vertices_pgr_set_updated_at() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN NEW.updated_at := now();
+RETURN NEW;
+END;
+$$;
+DROP TRIGGER IF EXISTS ways_vertices_pgr_set_updated_at ON ways_vertices_pgr;
+CREATE TRIGGER ways_vertices_pgr_set_updated_at BEFORE
+UPDATE ON ways_vertices_pgr FOR EACH ROW EXECUTE FUNCTION trg_ways_vertices_pgr_set_updated_at();
+-- triggers to keep updated_at fresh for ways
+CREATE OR REPLACE FUNCTION trg_ways_set_updated_at() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN NEW.updated_at := now();
+RETURN NEW;
+END;
+$$;
+DROP TRIGGER IF EXISTS ways_set_updated_at ON ways;
+CREATE TRIGGER ways_set_updated_at BEFORE
+UPDATE ON ways FOR EACH ROW EXECUTE FUNCTION trg_ways_set_updated_at();
+-- 7) maintenance recommendations (comments)
 -- - After bulk loading, run ANALYZE on the tables to refresh planner stats:
 --     ANALYZE route;
 --     ANALYZE route_geometry;
 --     ANALYZE stop;
 --     ANALYZE route_stop;
+--     ANALYZE ways;
+--     ANALYZE ways_vertices_pgr;
 -- - If you bulk-load many rows, consider disabling the triggers temporarily and backfilling the projected columns in one UPDATE pass for speed.
 -- - SP-GiST is a good fit for dense point datasets (stops). If you later need spatial index capabilities like KNN on complex line geometry or covering queries, GiST on lines is the right choice and is already present.
+-- - For routing calculations, ensure ways.cost and ways.reverse_cost are properly set for pgRouting functions
