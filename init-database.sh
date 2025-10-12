@@ -3,38 +3,37 @@ set -e
 
 echo "Setting up database with PostGIS and pgRouting..."
 
-# Wait for PostgreSQL to be ready
-until pg_isready -h localhost -p 5432 -U "$POSTGRES_USER"; do
-    echo "Waiting for PostgreSQL to be ready..."
-    sleep 2
-done
+# Set PostgreSQL connection environment variables for Unix socket
+export PGHOST=/var/run/postgresql
+export PGPORT=5432
+export PGUSER="$POSTGRES_USER"
+export PGDATABASE="$POSTGRES_DB"
 
-# Create database if it doesn't exist and enable extensions
-psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-EOSQL
-    -- Enable required extensions
+# Connect to the transport_db database and set up extensions
+psql -v ON_ERROR_STOP=1 <<-EOSQL
     CREATE EXTENSION IF NOT EXISTS postgis;
+    CREATE EXTENSION IF NOT EXISTS pgrouting;
     CREATE EXTENSION IF NOT EXISTS pg_trgm;
     CREATE EXTENSION IF NOT EXISTS btree_gin;
-    CREATE EXTENSION IF NOT EXISTS pgrouting;
 EOSQL
 
-echo "Extensions installed successfully."
+echo "Extensions created successfully"
 
-# Process OSM data with osm2pgrouting
-echo "Processing OSM data with osm2pgrouting..."
+# Import OSM data using osm2pgrouting with Unix socket
+echo "Importing OSM data..."
 osm2pgrouting \
-    --f /docker-entrypoint-initdb.d/labeled.osm \
+    --file /docker-entrypoint-initdb.d/labeled.osm \
     --conf /usr/local/share/osm2pgrouting/mapconfig.xml \
     --dbname "$POSTGRES_DB" \
     --username "$POSTGRES_USER" \
-    --host localhost \
-    --port 5432 \
+    --host /var/run/postgresql \
+    --no-index \
     --clean
 
-echo "OSM data processing completed."
+echo "OSM data imported successfully"
 
 # Apply custom schema
-echo "Applying custom schema from test.sql..."
-psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" -f /docker-entrypoint-initdb.d/test.sql
+echo "Applying custom schema..."
+psql -v ON_ERROR_STOP=1 -f /docker-entrypoint-initdb.d/schema.sql
 
-echo "Database initialization completed successfully."
+echo "Database setup complete!"
