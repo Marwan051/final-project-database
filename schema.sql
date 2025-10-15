@@ -2,7 +2,7 @@
 -- Uses GiST for lines, SP-GiST for points, and GIN for JSONB / text search.
 -- 0) Extensions are created in init-database.sh
 -- Create custom types (with conditional creation)
-DO $$ BEGIN CREATE TYPE route_kind_t AS ENUM ('continuous', 'fixed', 'variant', 'on_demand');
+DO $$ BEGIN CREATE TYPE route_kind_t AS ENUM ('continuous', 'fixed');
 EXCEPTION
 WHEN duplicate_object THEN null;
 END $$;
