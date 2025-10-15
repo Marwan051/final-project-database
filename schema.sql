@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS "route" (
     -- ex : microbus, bus, tram
     cost INTEGER NOT NULL,
     -- in piasters, 100 piasters = 1 pound
-    two_way BOOLEAN NOT NULL DEFAULT false,
+    one_way BOOLEAN NOT NULL DEFAULT true,
     operator TEXT,
     -- ex : independant, goverment, company
     attrs JSONB DEFAULT '{}'::jsonb,
