@@ -44,10 +44,6 @@ CREATE TABLE IF NOT EXISTS route_geometry (
     -- real geographical WGS84 storage
     geom_22992 geometry(LineString, 22992),
     -- projected copy in 22992(egypt red belt) in (meters) for fast queries
-    variant TEXT,
-    -- main route and alterations, shortcuts, and deviations that may occur
-    is_primary BOOLEAN DEFAULT TRUE,
-    -- marks the primary route that is taken
     attrs JSONB DEFAULT '{}'::jsonb,
     created_at TIMESTAMPTZ DEFAULT now(),
     updated_at TIMESTAMPTZ DEFAULT now()
@@ -56,9 +52,6 @@ CREATE TABLE IF NOT EXISTS route_geometry (
 CREATE INDEX IF NOT EXISTS idx_route_geometry_geom_22992_gist ON route_geometry USING GIST (geom_22992);
 CREATE INDEX IF NOT EXISTS idx_route_geometry_routeid ON route_geometry (route_id);
 CREATE INDEX IF NOT EXISTS idx_route_geometry_attrs_gin ON route_geometry USING GIN (attrs);
--- optional unique constraint: only one primary geometry per route
-CREATE UNIQUE INDEX IF NOT EXISTS uq_route_geom_route_primary ON route_geometry (route_id)
-WHERE (is_primary IS TRUE);
 -- trigger: populate geom_22992 from geom_4326 on insert/update
 CREATE OR REPLACE FUNCTION trg_route_geometry_sync_proj() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF TG_OP = 'INSERT'
     OR (
