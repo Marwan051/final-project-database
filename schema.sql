@@ -181,3 +181,52 @@ UPDATE ON route_stop FOR EACH ROW EXECUTE FUNCTION trg_route_stop_set_updated_at
 -- - If you bulk-load many rows, consider disabling the triggers temporarily and backfilling the projected columns in one UPDATE pass for speed.
 -- - SP-GiST is a good fit for dense point datasets (stops). If you later need spatial index capabilities like KNN on complex line geometry or covering queries, GiST on lines is the right choice and is already present.
 -- - For routing calculations, ensure ways.cost and ways.reverse_cost are properly set for pgRouting functions
+--
+--
+--
+-- staging tables for importing
+-- Staging for stops
+CREATE TABLE IF NOT EXISTS stage_stop (
+    code TEXT,
+    name TEXT,
+    geom_wkt TEXT,
+    -- e.g. "POINT(lon lat)" or "SRID=4326;POINT(...)"
+    attrs_text TEXT,
+    created_at_text TEXT,
+    updated_at_text TEXT
+);
+-- Staging for route
+CREATE TABLE IF NOT EXISTS stage_route (
+    route_id_text TEXT,
+    code TEXT,
+    name TEXT,
+    kind_text TEXT,
+    mode TEXT,
+    cost_text TEXT,
+    one_way_text TEXT,
+    operator TEXT,
+    attrs_text TEXT,
+    created_at_text TEXT,
+    updated_at_text TEXT
+);
+-- Staging for route_geometry
+CREATE TABLE IF NOT EXISTS stage_route_geometry (
+    route_geom_id_text TEXT,
+    route_id_text TEXT,
+    geom_wkt TEXT,
+    attrs_text TEXT,
+    created_at_text TEXT,
+    updated_at_text TEXT
+);
+-- Staging for route_stop
+CREATE TABLE IF NOT EXISTS stage_route_stop (
+    route_stop_id_text TEXT,
+    route_id_text TEXT,
+    stop_id_text TEXT,
+    stop_sequence_text TEXT,
+    arrival_time_text TEXT,
+    departure_time_text TEXT,
+    attrs_text TEXT,
+    created_at_text TEXT,
+    updated_at_text TEXT
+);

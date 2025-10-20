@@ -37,12 +37,21 @@ COPY labeled.osm.tar.gz /tmp/
 RUN tar -xzf /tmp/labeled.osm.tar.gz -C /docker-entrypoint-initdb.d/ \
     && rm /tmp/labeled.osm.tar.gz
 
-# Copy other database files and initialization script
-COPY schema.sql /docker-entrypoint-initdb.d/
+# Copy other database files and initialization scripts
+COPY schema.sql /docker-entrypoint-initdb.d/02-schema.sql
 COPY init-database.sh /docker-entrypoint-initdb.d/01-init-database.sh
 
-# Make the script executable
-RUN chmod +x /docker-entrypoint-initdb.d/01-init-database.sh
+# Copy CSV import script (serves dual purpose: init script + manual tool)
+COPY csv2db.sh /docker-entrypoint-initdb.d/03-csv2db.sh
+COPY csv2db.sh /usr/local/bin/csv2db.sh
+
+# Copy CSV directory
+COPY csvs /csvs
+
+# Make the scripts executable
+RUN chmod +x /docker-entrypoint-initdb.d/01-init-database.sh \
+    && chmod +x /docker-entrypoint-initdb.d/03-csv2db.sh \
+    && chmod +x /usr/local/bin/csv2db.sh
 
 # Set environment variables
 ENV POSTGRES_DB=transport_db
