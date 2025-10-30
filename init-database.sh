@@ -19,21 +19,8 @@ EOSQL
 
 echo "Extensions created successfully"
 
-# Import OSM data using osm2pgrouting with Unix socket
-echo "Importing OSM data..."
-osm2pgrouting \
-    --file /docker-entrypoint-initdb.d/labeled.osm \
-    --conf /usr/local/share/osm2pgrouting/mapconfig.xml \
-    --dbname "$POSTGRES_DB" \
-    --username "$POSTGRES_USER" \
-    --host /var/run/postgresql \
-    --no-index \
-    --clean
-
-echo "OSM data imported successfully"
-
 # Apply custom schema
 echo "Applying custom schema..."
-psql -v ON_ERROR_STOP=1 -f /docker-entrypoint-initdb.d/schema.sql
+psql -v ON_ERROR_STOP=1 -f /docker-entrypoint-initdb.d/02-schema.sql
 
 echo "Database setup complete!"

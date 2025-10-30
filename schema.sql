@@ -10,7 +10,7 @@ END $$;
 -- 1) route table (metadata)
 CREATE TABLE IF NOT EXISTS "route" (
     route_id BIGSERIAL PRIMARY KEY,
-    code TEXT,
+    code TEXT UNIQUE,
     -- code for the transport route itself ex: Cairo-Alex-1, Alex-Tram-line-1
     name TEXT NOT NULL,
     -- name for the transport ex: victoria - sidi gaber microbus
@@ -82,7 +82,7 @@ UPDATE ON route_geometry FOR EACH ROW EXECUTE FUNCTION trg_route_geometry_set_up
 -- 3) stop table (WGS84 canonical + projected copy); The stop itself ex: san stefano station
 CREATE TABLE IF NOT EXISTS "stop" (
     stop_id BIGSERIAL PRIMARY KEY,
-    code TEXT,
+    code TEXT UNIQUE,
     -- code for the stop ex: alx-raml,giza-faisal
     name TEXT,
     -- full name for the stop ex: alexandria raml tram station
@@ -141,8 +141,7 @@ CREATE TABLE IF NOT EXISTS route_stop (
     attrs JSONB DEFAULT '{}'::jsonb,
     created_at TIMESTAMPTZ DEFAULT now(),
     updated_at TIMESTAMPTZ DEFAULT now(),
-    UNIQUE (route_id, stop_sequence),
-    UNIQUE (route_id, stop_id)
+    UNIQUE (route_id, stop_sequence)
 );
 CREATE INDEX IF NOT EXISTS idx_route_stop_routeid_seq ON route_stop (route_id, stop_sequence);
 CREATE INDEX IF NOT EXISTS idx_route_stop_stopid ON route_stop (stop_id);
