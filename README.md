@@ -16,12 +16,11 @@ A PostgreSQL 18 database with PostGIS 3.6 and pgRouting for managing public tran
 │   └── gtfs-etl-transform.sql    # ETL transformation functions
 │
 ├── scripts/                   # Shell scripts
+│   ├── common.sh             # Shared database connection setup
 │   ├── init-database.sh      # Initialize PostgreSQL extensions
 │   ├── init-gtfs.sh          # GTFS initialization
 │   ├── gtfs2db.sh            # Import GTFS data to staging
 │   ├── gtfs-etl.sh           # Run ETL transformation
-│   ├── gtfs-auto-etl.sh      # Automated ETL daemon
-│   ├── csv2db.sh             # Generic CSV import tool
 │   └── test-deployment.sh    # Deployment verification
 │
 ├── gtfs-data/                 # GTFS CSV files

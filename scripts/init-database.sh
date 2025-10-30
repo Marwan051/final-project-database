@@ -3,13 +3,10 @@ set -e
 
 echo "Setting up database with PostGIS and pgRouting..."
 
-# Set PostgreSQL connection environment variables for Unix socket
-export PGHOST=/var/run/postgresql
-export PGPORT=5432
-export PGUSER="$POSTGRES_USER"
-export PGDATABASE="$POSTGRES_DB"
+# Source common database setup
+source /usr/local/bin/common.sh
 
-# Connect to the transport_db database and set up extensions
+# Create extensions
 psql -v ON_ERROR_STOP=1 <<-EOSQL
     CREATE EXTENSION IF NOT EXISTS postgis;
     CREATE EXTENSION IF NOT EXISTS pgrouting;

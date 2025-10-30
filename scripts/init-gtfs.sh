@@ -3,11 +3,8 @@ set -e
 
 echo "Setting up GTFS staging tables and ETL functions..."
 
-# Set PostgreSQL connection environment variables for Unix socket
-export PGHOST=/var/run/postgresql
-export PGPORT=5432
-export PGUSER="$POSTGRES_USER"
-export PGDATABASE="$POSTGRES_DB"
+# Source common database setup
+source /usr/local/bin/common.sh
 
 # Apply GTFS staging schema
 echo "Creating GTFS staging tables..."
@@ -22,13 +19,8 @@ echo "GTFS staging and ETL functions created successfully"
 if [ -d "/gtfs-data" ] && [ -n "$(ls -A /gtfs-data 2>/dev/null)" ]; then
     echo "GTFS data found, importing to staging..."
     
-    # Set environment variables for gtfs2db.sh
-    export DB_HOST=/var/run/postgresql
-    export DB_PORT=5432
-    export DB_NAME="$POSTGRES_DB"
-    export DB_USER="$POSTGRES_USER"
-    export GTFS_DIR=/gtfs-data
-    export RUN_ETL=true  # Automatically run ETL after initial import
+    # Set environment variable to run ETL after initial import
+    export RUN_ETL=true
     
     # Run GTFS import to staging
     /usr/local/bin/gtfs2db.sh --with-etl

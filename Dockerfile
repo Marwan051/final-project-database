@@ -20,11 +20,10 @@ COPY sql/gtfs-etl-transform.sql /docker-entrypoint-initdb.d/04-gtfs-etl-transfor
 COPY scripts/init-database.sh /docker-entrypoint-initdb.d/01-init-database.sh
 COPY scripts/init-gtfs.sh /docker-entrypoint-initdb.d/05-init-gtfs.sh
 
-# Copy GTFS management scripts to /usr/local/bin
+# Copy common database connection setup and GTFS management scripts
+COPY scripts/common.sh /usr/local/bin/common.sh
 COPY scripts/gtfs2db.sh /usr/local/bin/gtfs2db.sh
 COPY scripts/gtfs-etl.sh /usr/local/bin/gtfs-etl.sh
-COPY scripts/gtfs-auto-etl.sh /usr/local/bin/gtfs-auto-etl.sh
-COPY scripts/csv2db.sh /usr/local/bin/csv2db.sh
 
 # Copy GTFS data
 COPY gtfs-data /gtfs-data
