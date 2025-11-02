@@ -11,7 +11,7 @@ RUN apt-get update && apt-get install -y \
 # Create initialization directory
 RUN mkdir -p /docker-entrypoint-initdb.d
 
-# Copy SQL schemas (executed in alphabetical order)
+# Copy SQL schemas
 COPY sql/schema.sql /docker-entrypoint-initdb.d/02-schema.sql
 COPY sql/gtfs-staging-schema.sql /docker-entrypoint-initdb.d/03-gtfs-staging-schema.sql
 COPY sql/gtfs-etl-transform.sql /docker-entrypoint-initdb.d/04-gtfs-etl-transform.sql
