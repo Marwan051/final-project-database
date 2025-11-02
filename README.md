@@ -23,20 +23,15 @@ A PostgreSQL 18 database with PostGIS 3.6 and pgRouting for managing public tran
 │   ├── gtfs-etl.sh           # Run ETL transformation
 │   └── test-deployment.sh    # Deployment verification
 │
-├── gtfs-data/                 # GTFS CSV files
-│   ├── agency.csv
-│   ├── routes.csv
-│   ├── stops.csv
-│   ├── trips.csv
-│   ├── stop_times.csv
-│   ├── shapes.csv
-│   ├── calendar.csv
-│   └── feed_info.csv
-│
-└── docs/                      # Documentation
-    ├── DEPLOYMENT_CHECKLIST.md
-    ├── FIXES_APPLIED.md
-    └── MULTI_FEED_NOTES.md
+└── gtfs-data/                 # GTFS CSV files
+    ├── agency.csv
+    ├── routes.csv
+    ├── stops.csv
+    ├── trips.csv
+    ├── stop_times.csv
+    ├── shapes.csv
+    ├── calendar.csv
+    └── feed_info.csv
 ```
 
 ## Quick Start
