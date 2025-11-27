@@ -1,11 +1,14 @@
 CREATE TABLE IF NOT EXISTS gtfs_staging_agency (
-    agency_id TEXT PRIMARY KEY,
+    feed_id TEXT NOT NULL,
+    agency_id TEXT NOT NULL,
     agency_name TEXT,
     agency_url TEXT,
     agency_timezone TEXT,
-    imported_at TIMESTAMPTZ DEFAULT now()
+    imported_at TIMESTAMPTZ DEFAULT now(),
+    PRIMARY KEY (feed_id, agency_id)
 );
 CREATE TABLE IF NOT EXISTS gtfs_staging_calendar (
+    feed_id TEXT NOT NULL,
     monday INTEGER,
     tuesday INTEGER,
     wednesday INTEGER,
@@ -15,36 +18,44 @@ CREATE TABLE IF NOT EXISTS gtfs_staging_calendar (
     sunday INTEGER,
     start_date TEXT,
     end_date TEXT,
-    service_id TEXT PRIMARY KEY,
-    imported_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+    service_id TEXT NOT NULL,
+    imported_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (feed_id, service_id)
 );
 CREATE TABLE IF NOT EXISTS gtfs_staging_routes (
-    route_id TEXT PRIMARY KEY,
+    feed_id TEXT NOT NULL,
+    route_id TEXT NOT NULL,
     agency_id TEXT,
     route_long_name TEXT,
     route_short_name TEXT,
     route_type INTEGER,
     continuous_pickup INTEGER,
     continuous_drop_off INTEGER,
-    imported_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+    imported_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (feed_id, route_id)
 );
 CREATE TABLE IF NOT EXISTS gtfs_staging_stops (
-    stop_id TEXT PRIMARY KEY,
+    feed_id TEXT NOT NULL,
+    stop_id TEXT NOT NULL,
     stop_name TEXT,
     stop_lat DOUBLE PRECISION,
     stop_lon DOUBLE PRECISION,
-    imported_at TIMESTAMPTZ DEFAULT now()
+    imported_at TIMESTAMPTZ DEFAULT now(),
+    PRIMARY KEY (feed_id, stop_id)
 );
 CREATE TABLE IF NOT EXISTS gtfs_staging_trips (
+    feed_id TEXT NOT NULL,
     route_id TEXT,
     service_id TEXT,
     trip_headsign TEXT,
     direction_id INTEGER,
     shape_id TEXT,
-    trip_id TEXT PRIMARY KEY,
-    imported_at TIMESTAMPTZ DEFAULT now()
+    trip_id TEXT NOT NULL,
+    imported_at TIMESTAMPTZ DEFAULT now(),
+    PRIMARY KEY (feed_id, trip_id)
 );
 CREATE TABLE IF NOT EXISTS gtfs_staging_stop_times (
+    feed_id TEXT NOT NULL,
     trip_id TEXT,
     stop_id TEXT,
     stop_sequence INTEGER,
@@ -52,25 +63,28 @@ CREATE TABLE IF NOT EXISTS gtfs_staging_stop_times (
     departure_time TEXT,
     timepoint INTEGER,
     imported_at TIMESTAMPTZ DEFAULT now(),
-    PRIMARY KEY (trip_id, stop_sequence)
+    PRIMARY KEY (feed_id, trip_id, stop_sequence)
 );
 CREATE TABLE IF NOT EXISTS gtfs_staging_shapes (
+    feed_id TEXT NOT NULL,
     shape_id TEXT,
     shape_pt_sequence INTEGER,
     shape_pt_lat DOUBLE PRECISION,
     shape_pt_lon DOUBLE PRECISION,
-    imported_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (shape_id, shape_pt_sequence)
+    imported_at TIMESTAMPTZ DEFAULT now(),
+    PRIMARY KEY (feed_id, shape_id, shape_pt_sequence)
 );
 CREATE TABLE IF NOT EXISTS gtfs_staging_feed_info (
+    feed_id TEXT NOT NULL,
     feed_publisher_name TEXT,
     feed_publisher_url TEXT,
     feed_contact_url TEXT,
     feed_start_date TEXT,
     feed_end_date TEXT,
-    feed_version TEXT PRIMARY KEY,
+    feed_version TEXT NOT NULL,
     feed_lang TEXT,
-    imported_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+    imported_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (feed_id, feed_version)
 );
 -- ============================================================================
 -- ETL Tracking and Control

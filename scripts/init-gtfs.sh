@@ -22,7 +22,7 @@ if [ -d "/gtfs-data" ] && [ -n "$(ls -A /gtfs-data 2>/dev/null)" ]; then
     # Set environment variable to run ETL after initial import
     export RUN_ETL=true
     
-    # Run GTFS import to staging
+    # Run GTFS import to staging (UUID auto-generated)
     /usr/local/bin/gtfs2db.sh --with-etl
     
     echo "GTFS import and ETL completed!"
@@ -33,8 +33,9 @@ fi
 
 echo "GTFS setup complete!"
 echo ""
-echo "To add new GTFS data later:"
-echo "  1. Copy new GTFS files to container: docker cp ./gtfs-data/. transport-db:/gtfs-data/"
-echo "  2. Import to staging: docker exec transport-db gtfs2db.sh"
-echo "  3. Run ETL transformation: docker exec transport-db gtfs-etl.sh"
-echo "  4. Or do both: docker exec transport-db gtfs2db.sh --with-etl"
+echo "To add new GTFS feeds:"
+echo "  1. Copy GTFS files to container: docker cp ./my-feed/. transport-db:/gtfs-data/"
+echo "  2. Import: docker exec transport-db gtfs2db.sh --with-etl"
+echo ""
+echo "Example:"
+echo "  docker exec transport-db gtfs2db.sh --with-etl"

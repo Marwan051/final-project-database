@@ -2,21 +2,31 @@
 # gtfs2db.sh - Import GTFS data into PostgreSQL staging tables
 #
 # Usage:
-#   ./gtfs2db.sh                    # Load into staging only
-#   ./gtfs2db.sh --with-etl         # Load + run ETL transformation
+#   ./gtfs2db.sh [--with-etl]
+#   --with-etl: Run ETL after import
+#
+# Examples:
+#   ./gtfs2db.sh              # Import only
+#   ./gtfs2db.sh --with-etl   # Import and run ETL
 #
 # Environment variables:
 #   GTFS_DIR (default: /gtfs-data)
-#   RUN_ETL (default: false) - Set to 'true' to run ETL after import
+#   RUN_ETL (default: false)
 
 # Source common database setup
 source /usr/local/bin/common.sh
 
-# Check for --with-etl flag
+# Parse arguments
 RUN_ETL_FLAG=false
-if [[ "${1:-}" == "--with-etl" ]]; then
-    RUN_ETL_FLAG=true
-fi
+
+for arg in "$@"; do
+    if [[ "$arg" == "--with-etl" ]]; then
+        RUN_ETL_FLAG=true
+    fi
+done
+
+# Always generate a UUID for the feed
+FEED_ID=$(uuidgen)
 
 RUN_ETL="${RUN_ETL:-$RUN_ETL_FLAG}"
 
@@ -24,32 +34,39 @@ RUN_ETL="${RUN_ETL:-$RUN_ETL_FLAG}"
 if [ ! -d "$GTFS_DIR" ]; then
     echo "GTFS directory not found: $GTFS_DIR"
     echo "Skipping GTFS import."
-    exit 0
+    exit 1
 fi
 
 echo "==== GTFS STAGING import starting ===="
+echo "Feed ID: ${FEED_ID}"
 echo "DB: ${DB_USER}@${DB_HOST}:${DB_PORT}/${DB_NAME}"
 echo "GTFS dir: ${GTFS_DIR}"
 echo "Run ETL after import: ${RUN_ETL}"
 echo
 
-echo "Importing GTFS data into staging tables (preserving historical data)..."
+echo "Importing GTFS data for feed '${FEED_ID}'..."
+
+# Delete existing data for this feed_id only
+echo "Removing existing data for feed_id='${FEED_ID}'..."
+${PSQL} <<-SQL
+    DELETE FROM gtfs_staging_agency WHERE feed_id = '${FEED_ID}';
+    DELETE FROM gtfs_staging_calendar WHERE feed_id = '${FEED_ID}';
+    DELETE FROM gtfs_staging_routes WHERE feed_id = '${FEED_ID}';
+    DELETE FROM gtfs_staging_stops WHERE feed_id = '${FEED_ID}';
+    DELETE FROM gtfs_staging_shapes WHERE feed_id = '${FEED_ID}';
+    DELETE FROM gtfs_staging_trips WHERE feed_id = '${FEED_ID}';
+    DELETE FROM gtfs_staging_stop_times WHERE feed_id = '${FEED_ID}';
+    DELETE FROM gtfs_staging_feed_info WHERE feed_id = '${FEED_ID}';
+SQL
 
 # 1. Agency
 if [ -f "${GTFS_DIR}/agency.csv" ]; then
     echo "  - agency.csv → gtfs_staging_agency"
     ${PSQL} <<-SQL
-	CREATE TEMP TABLE temp_agency (LIKE gtfs_staging_agency INCLUDING DEFAULTS);
-	\copy temp_agency(agency_id, agency_name, agency_url, agency_timezone) FROM '${GTFS_DIR}/agency.csv' CSV HEADER;
-	
-	INSERT INTO gtfs_staging_agency
-	SELECT * FROM temp_agency
-	ON CONFLICT (agency_id) DO UPDATE SET
-	    agency_name = EXCLUDED.agency_name,
-	    agency_url = EXCLUDED.agency_url,
-	    agency_timezone = EXCLUDED.agency_timezone,
-	    imported_at = CURRENT_TIMESTAMP;
-	
+	CREATE TEMP TABLE temp_agency (agency_id TEXT, agency_name TEXT, agency_url TEXT, agency_timezone TEXT);
+	\copy temp_agency FROM '${GTFS_DIR}/agency.csv' CSV HEADER;
+	INSERT INTO gtfs_staging_agency (feed_id, agency_id, agency_name, agency_url, agency_timezone)
+	SELECT '${FEED_ID}', agency_id, agency_name, agency_url, agency_timezone FROM temp_agency;
 	DROP TABLE temp_agency;
 SQL
 fi
@@ -58,23 +75,10 @@ fi
 if [ -f "${GTFS_DIR}/calendar.csv" ]; then
     echo "  - calendar.csv → gtfs_staging_calendar"
     ${PSQL} <<-SQL
-	CREATE TEMP TABLE temp_calendar (LIKE gtfs_staging_calendar INCLUDING DEFAULTS);
-	\copy temp_calendar(monday, tuesday, wednesday, thursday, friday, saturday, sunday, start_date, end_date, service_id) FROM '${GTFS_DIR}/calendar.csv' CSV HEADER;
-	
-	INSERT INTO gtfs_staging_calendar
-	SELECT * FROM temp_calendar
-	ON CONFLICT (service_id) DO UPDATE SET
-	    monday = EXCLUDED.monday,
-	    tuesday = EXCLUDED.tuesday,
-	    wednesday = EXCLUDED.wednesday,
-	    thursday = EXCLUDED.thursday,
-	    friday = EXCLUDED.friday,
-	    saturday = EXCLUDED.saturday,
-	    sunday = EXCLUDED.sunday,
-	    start_date = EXCLUDED.start_date,
-	    end_date = EXCLUDED.end_date,
-	    imported_at = CURRENT_TIMESTAMP;
-	
+	CREATE TEMP TABLE temp_calendar (monday INT, tuesday INT, wednesday INT, thursday INT, friday INT, saturday INT, sunday INT, start_date TEXT, end_date TEXT, service_id TEXT);
+	\copy temp_calendar FROM '${GTFS_DIR}/calendar.csv' CSV HEADER;
+	INSERT INTO gtfs_staging_calendar (feed_id, monday, tuesday, wednesday, thursday, friday, saturday, sunday, start_date, end_date, service_id)
+	SELECT '${FEED_ID}', monday, tuesday, wednesday, thursday, friday, saturday, sunday, start_date, end_date, service_id FROM temp_calendar;
 	DROP TABLE temp_calendar;
 SQL
 fi
@@ -83,20 +87,10 @@ fi
 if [ -f "${GTFS_DIR}/routes.csv" ]; then
     echo "  - routes.csv → gtfs_staging_routes"
     ${PSQL} <<-SQL
-	CREATE TEMP TABLE temp_routes (LIKE gtfs_staging_routes INCLUDING DEFAULTS);
-	\copy temp_routes(route_id, agency_id, route_long_name, route_short_name, route_type, continuous_pickup, continuous_drop_off) FROM '${GTFS_DIR}/routes.csv' CSV HEADER;
-	
-	INSERT INTO gtfs_staging_routes
-	SELECT * FROM temp_routes
-	ON CONFLICT (route_id) DO UPDATE SET
-	    agency_id = EXCLUDED.agency_id,
-	    route_long_name = EXCLUDED.route_long_name,
-	    route_short_name = EXCLUDED.route_short_name,
-	    route_type = EXCLUDED.route_type,
-	    continuous_pickup = EXCLUDED.continuous_pickup,
-	    continuous_drop_off = EXCLUDED.continuous_drop_off,
-	    imported_at = CURRENT_TIMESTAMP;
-	
+	CREATE TEMP TABLE temp_routes (route_id TEXT, agency_id TEXT, route_long_name TEXT, route_short_name TEXT, route_type INT, continuous_pickup INT, continuous_drop_off INT);
+	\copy temp_routes FROM '${GTFS_DIR}/routes.csv' CSV HEADER;
+	INSERT INTO gtfs_staging_routes (feed_id, route_id, agency_id, route_long_name, route_short_name, route_type, continuous_pickup, continuous_drop_off)
+	SELECT '${FEED_ID}', route_id, agency_id, route_long_name, route_short_name, route_type, continuous_pickup, continuous_drop_off FROM temp_routes;
 	DROP TABLE temp_routes;
 SQL
 fi
@@ -105,17 +99,10 @@ fi
 if [ -f "${GTFS_DIR}/stops.csv" ]; then
     echo "  - stops.csv → gtfs_staging_stops"
     ${PSQL} <<-SQL
-	CREATE TEMP TABLE temp_stops (LIKE gtfs_staging_stops INCLUDING DEFAULTS);
-	\copy temp_stops(stop_id, stop_name, stop_lat, stop_lon) FROM '${GTFS_DIR}/stops.csv' CSV HEADER;
-	
-	INSERT INTO gtfs_staging_stops
-	SELECT * FROM temp_stops
-	ON CONFLICT (stop_id) DO UPDATE SET
-	    stop_name = EXCLUDED.stop_name,
-	    stop_lat = EXCLUDED.stop_lat,
-	    stop_lon = EXCLUDED.stop_lon,
-	    imported_at = CURRENT_TIMESTAMP;
-	
+	CREATE TEMP TABLE temp_stops (stop_id TEXT, stop_name TEXT, stop_lat DOUBLE PRECISION, stop_lon DOUBLE PRECISION);
+	\copy temp_stops FROM '${GTFS_DIR}/stops.csv' CSV HEADER;
+	INSERT INTO gtfs_staging_stops (feed_id, stop_id, stop_name, stop_lat, stop_lon)
+	SELECT '${FEED_ID}', stop_id, stop_name, stop_lat, stop_lon FROM temp_stops;
 	DROP TABLE temp_stops;
 SQL
 fi
@@ -124,16 +111,10 @@ fi
 if [ -f "${GTFS_DIR}/shapes.csv" ]; then
     echo "  - shapes.csv → gtfs_staging_shapes"
     ${PSQL} <<-SQL
-	CREATE TEMP TABLE temp_shapes (LIKE gtfs_staging_shapes INCLUDING DEFAULTS);
-	\copy temp_shapes(shape_id, shape_pt_sequence, shape_pt_lat, shape_pt_lon) FROM '${GTFS_DIR}/shapes.csv' CSV HEADER;
-	
-	INSERT INTO gtfs_staging_shapes
-	SELECT * FROM temp_shapes
-	ON CONFLICT (shape_id, shape_pt_sequence) DO UPDATE SET
-	    shape_pt_lat = EXCLUDED.shape_pt_lat,
-	    shape_pt_lon = EXCLUDED.shape_pt_lon,
-	    imported_at = CURRENT_TIMESTAMP;
-	
+	CREATE TEMP TABLE temp_shapes (shape_id TEXT, shape_pt_sequence INT, shape_pt_lat DOUBLE PRECISION, shape_pt_lon DOUBLE PRECISION);
+	\copy temp_shapes FROM '${GTFS_DIR}/shapes.csv' CSV HEADER;
+	INSERT INTO gtfs_staging_shapes (feed_id, shape_id, shape_pt_sequence, shape_pt_lat, shape_pt_lon)
+	SELECT '${FEED_ID}', shape_id, shape_pt_sequence, shape_pt_lat, shape_pt_lon FROM temp_shapes;
 	DROP TABLE temp_shapes;
 SQL
 fi
@@ -142,19 +123,10 @@ fi
 if [ -f "${GTFS_DIR}/trips.csv" ]; then
     echo "  - trips.csv → gtfs_staging_trips"
     ${PSQL} <<-SQL
-	CREATE TEMP TABLE temp_trips (LIKE gtfs_staging_trips INCLUDING DEFAULTS);
-	\copy temp_trips(route_id, service_id, trip_headsign, direction_id, shape_id, trip_id) FROM '${GTFS_DIR}/trips.csv' CSV HEADER;
-	
-	INSERT INTO gtfs_staging_trips
-	SELECT * FROM temp_trips
-	ON CONFLICT (trip_id) DO UPDATE SET
-	    route_id = EXCLUDED.route_id,
-	    service_id = EXCLUDED.service_id,
-	    trip_headsign = EXCLUDED.trip_headsign,
-	    direction_id = EXCLUDED.direction_id,
-	    shape_id = EXCLUDED.shape_id,
-	    imported_at = CURRENT_TIMESTAMP;
-	
+	CREATE TEMP TABLE temp_trips (route_id TEXT, service_id TEXT, trip_headsign TEXT, direction_id INT, shape_id TEXT, trip_id TEXT);
+	\copy temp_trips FROM '${GTFS_DIR}/trips.csv' CSV HEADER;
+	INSERT INTO gtfs_staging_trips (feed_id, route_id, service_id, trip_headsign, direction_id, shape_id, trip_id)
+	SELECT '${FEED_ID}', route_id, service_id, trip_headsign, direction_id, shape_id, trip_id FROM temp_trips;
 	DROP TABLE temp_trips;
 SQL
 fi
@@ -163,18 +135,10 @@ fi
 if [ -f "${GTFS_DIR}/stop_times.csv" ]; then
     echo "  - stop_times.csv → gtfs_staging_stop_times"
     ${PSQL} <<-SQL
-	CREATE TEMP TABLE temp_stop_times (LIKE gtfs_staging_stop_times INCLUDING DEFAULTS);
-	\copy temp_stop_times(trip_id, stop_id, stop_sequence, arrival_time, departure_time, timepoint) FROM '${GTFS_DIR}/stop_times.csv' CSV HEADER;
-	
-	INSERT INTO gtfs_staging_stop_times
-	SELECT * FROM temp_stop_times
-	ON CONFLICT (trip_id, stop_sequence) DO UPDATE SET
-	    stop_id = EXCLUDED.stop_id,
-	    arrival_time = EXCLUDED.arrival_time,
-	    departure_time = EXCLUDED.departure_time,
-	    timepoint = EXCLUDED.timepoint,
-	    imported_at = CURRENT_TIMESTAMP;
-	
+	CREATE TEMP TABLE temp_stop_times (trip_id TEXT, stop_id TEXT, stop_sequence INT, arrival_time TEXT, departure_time TEXT, timepoint INT);
+	\copy temp_stop_times FROM '${GTFS_DIR}/stop_times.csv' CSV HEADER;
+	INSERT INTO gtfs_staging_stop_times (feed_id, trip_id, stop_id, stop_sequence, arrival_time, departure_time, timepoint)
+	SELECT '${FEED_ID}', trip_id, stop_id, stop_sequence, arrival_time, departure_time, timepoint FROM temp_stop_times;
 	DROP TABLE temp_stop_times;
 SQL
 fi
@@ -183,20 +147,10 @@ fi
 if [ -f "${GTFS_DIR}/feed_info.csv" ]; then
     echo "  - feed_info.csv → gtfs_staging_feed_info"
     ${PSQL} <<-SQL
-	CREATE TEMP TABLE temp_feed_info (LIKE gtfs_staging_feed_info INCLUDING DEFAULTS);
-	\copy temp_feed_info(feed_publisher_name, feed_publisher_url, feed_contact_url, feed_start_date, feed_end_date, feed_version, feed_lang) FROM '${GTFS_DIR}/feed_info.csv' CSV HEADER;
-	
-	INSERT INTO gtfs_staging_feed_info
-	SELECT * FROM temp_feed_info
-	ON CONFLICT (feed_version) DO UPDATE SET
-	    feed_publisher_name = EXCLUDED.feed_publisher_name,
-	    feed_publisher_url = EXCLUDED.feed_publisher_url,
-	    feed_contact_url = EXCLUDED.feed_contact_url,
-	    feed_start_date = EXCLUDED.feed_start_date,
-	    feed_end_date = EXCLUDED.feed_end_date,
-	    feed_lang = EXCLUDED.feed_lang,
-	    imported_at = CURRENT_TIMESTAMP;
-	
+	CREATE TEMP TABLE temp_feed_info (feed_publisher_name TEXT, feed_publisher_url TEXT, feed_contact_url TEXT, feed_start_date TEXT, feed_end_date TEXT, feed_version TEXT, feed_lang TEXT);
+	\copy temp_feed_info FROM '${GTFS_DIR}/feed_info.csv' CSV HEADER;
+	INSERT INTO gtfs_staging_feed_info (feed_id, feed_publisher_name, feed_publisher_url, feed_contact_url, feed_start_date, feed_end_date, feed_version, feed_lang)
+	SELECT '${FEED_ID}', feed_publisher_name, feed_publisher_url, feed_contact_url, feed_start_date, feed_end_date, feed_version, feed_lang FROM temp_feed_info;
 	DROP TABLE temp_feed_info;
 SQL
 fi

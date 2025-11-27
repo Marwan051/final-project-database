@@ -25,12 +25,14 @@ BEGIN -- =======================================================================
 RAISE NOTICE 'ETL Step 1: Transforming stops...';
 WITH inserted AS (
     INSERT INTO "stop" (code, name, geom_4326, attrs)
-    SELECT s.stop_id AS code,
+    SELECT s.feed_id || ':' || s.stop_id AS code,
         s.stop_name AS name,
         ST_SetSRID(ST_MakePoint(s.stop_lon, s.stop_lat), 4326) AS geom_4326,
         jsonb_build_object(
             'source',
             'gtfs',
+            'feed_id',
+            s.feed_id,
             'gtfs_stop_id',
             s.stop_id
         ) AS attrs
@@ -50,31 +52,37 @@ FROM inserted;
 RAISE NOTICE 'Inserted/Updated % stops',
 v_stops_inserted;
 -- ========================================================================
--- 2. TRANSFORM GTFS ROUTES → operational "route" table
+-- 2. TRANSFORM GTFS ROUTES → operational "routes" table
 -- ========================================================================
 RAISE NOTICE 'ETL Step 2: Transforming routes...';
 WITH inserted AS (
-    INSERT INTO "route" (
+    INSERT INTO "routes" (
+            feed_id,
             code,
             name,
-            kind,
+            continuous_pickup,
+            continuous_drop_off,
             mode,
             cost,
             one_way,
             operator,
             attrs
         )
-    SELECT r.route_id AS code,
+    SELECT r.feed_id,
+        r.route_id AS code,
         COALESCE(
             r.route_long_name,
             r.route_short_name,
             r.route_id
         ) AS name,
         CASE
-            WHEN r.continuous_pickup = 0
-            OR r.continuous_drop_off = 0 THEN 'continuous'::route_kind_t
-            ELSE 'fixed'::route_kind_t
-        END AS kind,
+            WHEN r.continuous_pickup = 0 THEN true
+            ELSE false
+        END AS continuous_pickup,
+        CASE
+            WHEN r.continuous_drop_off = 0 THEN true
+            ELSE false
+        END AS continuous_drop_off,
         -- Use route_short_name if it's a vehicle type, otherwise use standard GTFS type
         COALESCE(
             NULLIF(LOWER(TRIM(r.route_short_name)), ''),
@@ -101,6 +109,8 @@ WITH inserted AS (
         jsonb_build_object(
             'source',
             'gtfs',
+            'feed_id',
+            r.feed_id,
             'gtfs_route_id',
             r.route_id,
             'route_type',
@@ -112,13 +122,15 @@ WITH inserted AS (
         ) AS attrs
     FROM gtfs_staging_routes r
         LEFT JOIN gtfs_staging_agency a ON r.agency_id = a.agency_id
-    WHERE r.route_id IS NOT NULL ON CONFLICT (code) DO
+        AND r.feed_id = a.feed_id
+    WHERE r.route_id IS NOT NULL ON CONFLICT (feed_id, code) DO
     UPDATE
     SET name = EXCLUDED.name,
-        kind = EXCLUDED.kind,
+        continuous_pickup = EXCLUDED.continuous_pickup,
+        continuous_drop_off = EXCLUDED.continuous_drop_off,
         mode = EXCLUDED.mode,
         operator = EXCLUDED.operator,
-        attrs = "route".attrs || EXCLUDED.attrs,
+        attrs = "routes".attrs || EXCLUDED.attrs,
         updated_at = now()
     RETURNING 1
 )
@@ -160,7 +172,7 @@ inserted AS (
         ) AS attrs
     FROM shape_lines sl
         JOIN gtfs_staging_trips t ON sl.shape_id = t.shape_id
-        JOIN "route" r ON r.code = t.route_id
+        JOIN "routes" r ON r.code = t.route_id
     WHERE sl.geom IS NOT NULL ON CONFLICT DO NOTHING -- Avoid duplicates
     RETURNING 1
 )
@@ -181,8 +193,10 @@ WITH trip_stops AS (
         st.departure_time
     FROM gtfs_staging_stop_times st
         JOIN gtfs_staging_trips t ON st.trip_id = t.trip_id
-        JOIN "route" r ON r.code = t.route_id
-        JOIN "stop" s ON s.code = st.stop_id
+        AND st.feed_id = t.feed_id
+        JOIN "routes" r ON r.code = t.route_id
+        AND r.feed_id = t.feed_id
+        JOIN "stop" s ON s.code = t.feed_id || ':' || st.stop_id
     WHERE st.arrival_time IS NOT NULL
     ORDER BY r.route_id,
         st.stop_sequence,

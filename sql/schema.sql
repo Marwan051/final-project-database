@@ -1,20 +1,19 @@
 -- Assumes PostGIS is installed. Stores canonical WGS84 (4326) + projected copies (22992).
 -- Uses GiST for lines, SP-GiST for points, and GIN for JSONB / text search.
 -- 0) Extensions are created in init-database.sh
--- Create custom types (with conditional creation)
-DO $$ BEGIN CREATE TYPE route_kind_t AS ENUM ('continuous', 'fixed');
-EXCEPTION
-WHEN duplicate_object THEN null;
-END $$;
--- optional helper for some composite indexes (kept handy)
--- 1) route table (metadata)
-CREATE TABLE IF NOT EXISTS "route" (
+-- 1) routes table (metadata)
+CREATE TABLE IF NOT EXISTS "routes" (
     route_id BIGSERIAL PRIMARY KEY,
-    code TEXT UNIQUE,
+    feed_id TEXT,
+    -- GTFS feed identifier for multi-feed support
+    code TEXT,
     -- code for the transport route itself ex: Cairo-Alex-1, Alex-Tram-line-1
     name TEXT NOT NULL,
     -- name for the transport ex: victoria - sidi gaber microbus
-    kind route_kind_t DEFAULT 'continuous' NOT NULL,
+    continuous_pickup BOOLEAN NOT NULL DEFAULT true,
+    -- GTFS: 0=allowed, 1=not allowed → stored as boolean (true=allowed)
+    continuous_drop_off BOOLEAN NOT NULL DEFAULT true,
+    -- GTFS: 0=allowed, 1=not allowed → stored as boolean (true=allowed)
     mode TEXT,
     -- ex : microbus, bus, tram
     cost INTEGER NOT NULL,
@@ -24,22 +23,25 @@ CREATE TABLE IF NOT EXISTS "route" (
     -- ex : independant, goverment, company
     attrs JSONB DEFAULT '{}'::jsonb,
     created_at TIMESTAMPTZ DEFAULT now(),
-    updated_at TIMESTAMPTZ DEFAULT now()
+    updated_at TIMESTAMPTZ DEFAULT now(),
+    UNIQUE (feed_id, code)
 );
-CREATE INDEX IF NOT EXISTS idx_route_kind ON "route"(kind);
-CREATE INDEX IF NOT EXISTS idx_route_attrs_gin ON "route" USING GIN (attrs);
+CREATE INDEX IF NOT EXISTS idx_routes_feed_id ON "routes"(feed_id);
+CREATE INDEX IF NOT EXISTS idx_routes_continuous_pickup ON "routes"(continuous_pickup);
+CREATE INDEX IF NOT EXISTS idx_routes_continuous_drop_off ON "routes"(continuous_drop_off);
+CREATE INDEX IF NOT EXISTS idx_routes_attrs_gin ON "routes" USING GIN (attrs);
 -- trigger to keep updated_at fresh
-CREATE OR REPLACE FUNCTION trg_route_set_updated_at() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN NEW.updated_at := now();
+CREATE OR REPLACE FUNCTION trg_routes_set_updated_at() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN NEW.updated_at := now();
 RETURN NEW;
 END;
 $$;
-DROP TRIGGER IF EXISTS route_set_updated_at ON "route";
-CREATE TRIGGER route_set_updated_at BEFORE
-UPDATE ON "route" FOR EACH ROW EXECUTE FUNCTION trg_route_set_updated_at();
+DROP TRIGGER IF EXISTS routes_set_updated_at ON "routes";
+CREATE TRIGGER routes_set_updated_at BEFORE
+UPDATE ON "routes" FOR EACH ROW EXECUTE FUNCTION trg_routes_set_updated_at();
 -- 2) route_geometry table (WGS84 canonical + projected copy)
 CREATE TABLE IF NOT EXISTS route_geometry (
     route_geom_id BIGSERIAL PRIMARY KEY,
-    route_id BIGINT NOT NULL REFERENCES "route"(route_id) ON DELETE CASCADE,
+    route_id BIGINT NOT NULL REFERENCES "routes"(route_id) ON DELETE CASCADE,
     geom_4326 geometry(LineString, 4326) NOT NULL,
     -- real geographical WGS84 storage
     geom_22992 geometry(LineString, 22992),
@@ -132,7 +134,7 @@ UPDATE ON "stop" FOR EACH ROW EXECUTE FUNCTION trg_stop_set_updated_at();
 -- 4) route_stop, actual stop in route ex : san stefano station tram 1
 CREATE TABLE IF NOT EXISTS route_stop (
     route_stop_id BIGSERIAL PRIMARY KEY,
-    route_id BIGINT NOT NULL REFERENCES "route"(route_id) ON DELETE CASCADE,
+    route_id BIGINT NOT NULL REFERENCES "routes"(route_id) ON DELETE CASCADE,
     stop_id BIGINT NOT NULL REFERENCES "stop"(stop_id) ON DELETE CASCADE,
     stop_sequence INTEGER NOT NULL,
     -- the numbering of the stop in the route, ex : san stefano: 1, ganaklis: 2
@@ -171,7 +173,7 @@ UPDATE ON route_stop FOR EACH ROW EXECUTE FUNCTION trg_route_stop_set_updated_at
 --   AND ST_DWithin(rg.geom_22992, ST_Transform(ST_SetSRID(ST_MakePoint(lon, lat),4326),22992), 100);
 -- 6) maintenance recommendations (comments)
 -- - After bulk loading, run ANALYZE on the tables to refresh planner stats:
---     ANALYZE route;
+--     ANALYZE routes;
 --     ANALYZE route_geometry;
 --     ANALYZE stop;
 --     ANALYZE route_stop;
