@@ -1,34 +1,14 @@
 #!/usr/bin/env bash
-# gtfs2db.sh - Import GTFS data into PostgreSQL staging tables
+# gtfs2db.sh - Import GTFS data into PostgreSQL and transform to operational schema
 #
 # Usage:
-#   ./gtfs2db.sh [--with-etl]
-#   --with-etl: Run ETL after import
-#
-# Examples:
-#   ./gtfs2db.sh              # Import only
-#   ./gtfs2db.sh --with-etl   # Import and run ETL
+#   ./gtfs2db.sh
 #
 # Environment variables:
 #   GTFS_DIR (default: /gtfs-data)
-#   RUN_ETL (default: false)
 
 # Source common database setup
 source /usr/local/bin/common.sh
-
-# Parse arguments
-RUN_ETL_FLAG=false
-
-for arg in "$@"; do
-    if [[ "$arg" == "--with-etl" ]]; then
-        RUN_ETL_FLAG=true
-    fi
-done
-
-# Always generate a UUID for the feed
-FEED_ID=$(uuidgen)
-
-RUN_ETL="${RUN_ETL:-$RUN_ETL_FLAG}"
 
 # Check if GTFS directory exists
 if [ ! -d "$GTFS_DIR" ]; then
@@ -37,11 +17,22 @@ if [ ! -d "$GTFS_DIR" ]; then
     exit 1
 fi
 
-echo "==== GTFS STAGING import starting ===="
+# Get feed_id from feed_info.csv
+if [ -f "${GTFS_DIR}/feed_info.csv" ]; then
+    # Read feed_id from second line, first column
+    FEED_ID=$(tail -n +2 "${GTFS_DIR}/feed_info.csv" | head -1 | cut -d',' -f1)
+fi
+
+if [ -z "$FEED_ID" ]; then
+    echo "ERROR: feed_id not found in ${GTFS_DIR}/feed_info.csv"
+    echo "Please ensure feed_info.csv exists and has a feed_id in the first column."
+    exit 1
+fi
+
+echo "==== GTFS import starting ===="
 echo "Feed ID: ${FEED_ID}"
 echo "DB: ${DB_USER}@${DB_HOST}:${DB_PORT}/${DB_NAME}"
 echo "GTFS dir: ${GTFS_DIR}"
-echo "Run ETL after import: ${RUN_ETL}"
 echo
 
 echo "Importing GTFS data for feed '${FEED_ID}'..."
@@ -147,7 +138,7 @@ fi
 if [ -f "${GTFS_DIR}/feed_info.csv" ]; then
     echo "  - feed_info.csv → gtfs_staging_feed_info"
     ${PSQL} <<-SQL
-	CREATE TEMP TABLE temp_feed_info (feed_publisher_name TEXT, feed_publisher_url TEXT, feed_contact_url TEXT, feed_start_date TEXT, feed_end_date TEXT, feed_version TEXT, feed_lang TEXT);
+	CREATE TEMP TABLE temp_feed_info (csv_feed_id TEXT, feed_publisher_name TEXT, feed_publisher_url TEXT, feed_contact_url TEXT, feed_start_date TEXT, feed_end_date TEXT, feed_version TEXT, feed_lang TEXT);
 	\copy temp_feed_info FROM '${GTFS_DIR}/feed_info.csv' CSV HEADER;
 	INSERT INTO gtfs_staging_feed_info (feed_id, feed_publisher_name, feed_publisher_url, feed_contact_url, feed_start_date, feed_end_date, feed_version, feed_lang)
 	SELECT '${FEED_ID}', feed_publisher_name, feed_publisher_url, feed_contact_url, feed_start_date, feed_end_date, feed_version, feed_lang FROM temp_feed_info;
@@ -168,15 +159,7 @@ ${PSQL} <<-SQL
 SQL
 
 
-# Run ETL if requested
-if [ "$RUN_ETL" = "true" ]; then
-    echo
-    echo "Running ETL transformation to operational schema..."
-    if command -v gtfs-etl.sh &> /dev/null; then
-        gtfs-etl.sh
-    else
-        ${PSQL} <<-SQL
-		SELECT gtfs_run_etl();
-SQL
-    fi
-fi
+# Run ETL transformation
+echo
+echo "Running ETL transformation to operational schema..."
+gtfs-etl.sh

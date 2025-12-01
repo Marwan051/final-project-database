@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# test-deployment.sh - Verify transport database deployment
 set -euo pipefail
 
 echo "=========================================="
@@ -7,7 +6,10 @@ echo "Transport Database Deployment Test"
 echo "=========================================="
 echo ""
 
-# Colors for output
+#!/bin/bash
+set -euo pipefail
+
+# Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -125,24 +127,6 @@ else
 fi
 
 echo ""
-echo "9. Checking ETL history..."
-ETL_RUNS=$(docker exec transport-db psql -U postgres -d transport_db -t -c "SELECT COUNT(*) FROM gtfs_etl_log;" 2>/dev/null | tr -d ' ' || echo "0")
-if [ "$ETL_RUNS" -gt 0 ]; then
-    test_pass "ETL has run ($ETL_RUNS times)"
-    echo ""
-    echo "   Last ETL run:"
-    docker exec transport-db psql -U postgres -d transport_db -c "SELECT etl_id, etl_type, status, started_at, completed_at FROM gtfs_etl_log ORDER BY etl_id DESC LIMIT 1;"
-else
-    test_warn "No ETL runs recorded"
-fi
-
-echo ""
 echo "=========================================="
 echo "Deployment Test Complete!"
 echo "=========================================="
-echo ""
-echo "Next steps:"
-echo "  - Access pgAdmin: http://localhost:5050"
-echo "  - Connect to DB: psql -h localhost -U postgres -d transport_db"
-echo "  - Import new GTFS: docker exec transport-db gtfs2db.sh --with-etl"
-echo ""

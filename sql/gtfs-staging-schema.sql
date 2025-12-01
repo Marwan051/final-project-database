@@ -86,45 +86,7 @@ CREATE TABLE IF NOT EXISTS gtfs_staging_feed_info (
     imported_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (feed_id, feed_version)
 );
--- ============================================================================
--- ETL Tracking and Control
--- ============================================================================
--- Track ETL runs
-CREATE TABLE IF NOT EXISTS gtfs_etl_log (
-    etl_id BIGSERIAL PRIMARY KEY,
-    etl_type TEXT NOT NULL,
-    -- 'full_load', 'incremental', 'manual'
-    started_at TIMESTAMPTZ DEFAULT now(),
-    completed_at TIMESTAMPTZ,
-    status TEXT DEFAULT 'running',
-    -- 'running', 'completed', 'failed'
-    records_processed JSONB DEFAULT '{}'::jsonb,
-    error_message TEXT
-);
--- ETL configuration
-CREATE TABLE IF NOT EXISTS gtfs_etl_config (
-    config_key TEXT PRIMARY KEY,
-    config_value TEXT NOT NULL,
-    description TEXT,
-    updated_at TIMESTAMPTZ DEFAULT now()
-);
--- Insert default ETL configuration
-INSERT INTO gtfs_etl_config (config_key, config_value, description)
-VALUES (
-        'auto_etl_enabled',
-        'false',
-        'Enable automatic ETL on interval'
-    ),
-    (
-        'etl_interval_minutes',
-        '60',
-        'How often to run ETL (in minutes)'
-    ),
-    ('last_etl_run', '', 'Timestamp of last ETL run'),
-    ('merge_strategy', 'upsert', 'upsert or replace') ON CONFLICT (config_key) DO NOTHING;
--- ============================================================================
 -- Helper Functions for Data Quality
--- ============================================================================
 -- Validate staging data quality
 CREATE OR REPLACE FUNCTION gtfs_validate_staging_data() RETURNS TABLE(
         table_name TEXT,
@@ -208,7 +170,7 @@ SELECT 'gtfs_staging_shapes'::TEXT,
 FROM gtfs_staging_shapes;
 END;
 $$;
--- Create indexes on staging tables for better ETL performance
+-- Performance Indexes
 CREATE INDEX IF NOT EXISTS idx_staging_routes_id ON gtfs_staging_routes(route_id);
 CREATE INDEX IF NOT EXISTS idx_staging_stops_id ON gtfs_staging_stops(stop_id);
 CREATE INDEX IF NOT EXISTS idx_staging_trips_id ON gtfs_staging_trips(trip_id);

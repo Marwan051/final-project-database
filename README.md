@@ -139,10 +139,10 @@ ORDER BY distance_m
 LIMIT 5;
 
 -- Routes passing through a stop
-SELECT r.code, r.name, r.mode, rs.stop_sequence
+SELECT r.name, r.mode, rs.stop_sequence
 FROM route_stop rs
 JOIN route r ON rs.route_id = r.route_id
-WHERE rs.stop_id = (SELECT stop_id FROM stop WHERE code = '1')
+WHERE rs.stop_id = (SELECT stop_id FROM stop WHERE name ILIKE '%san stefano%' LIMIT 1)
 ORDER BY r.name;
 ```
 

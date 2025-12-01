@@ -1,44 +1,16 @@
-#!/usr/bin/env bash
-# gtfs-etl.sh - Transform GTFS staging data into operational schema
-#
-# Usage:
-#   ./gtfs-etl.sh                    # Run ETL (keep staging data)
-#   ./gtfs-etl.sh --clear-staging    # Run ETL and clear staging
-#
-# Environment variables:
-#   ETL_TYPE (default: incremental) - 'full_load' or 'incremental'
-
 # Source common database setup
 source /usr/local/bin/common.sh
 
-# Check for --clear-staging flag
-CLEAR_STAGING=false
-if [[ "${1:-}" == "--clear-staging" ]]; then
-    CLEAR_STAGING=true
+# Default: clear staging after ETL (one-time run)
+CLEAR_STAGING=true
+if [[ "${1:-}" == "--keep-staging" ]]; then
+    CLEAR_STAGING=false
 fi
-
-ETL_TYPE="${ETL_TYPE:-incremental}"
-
 
 # Run ETL function
 echo "Running ETL transformation..."
 ${PSQL} <<-SQL
-    SELECT gtfs_etl_to_operational('${ETL_TYPE}', ${CLEAR_STAGING});
-SQL
-
-echo
-echo "ETL Log (last 5 runs):"
-${PSQL} <<-SQL
-    SELECT 
-        etl_id,
-        etl_type,
-        started_at,
-        completed_at,
-        status,
-        records_processed
-    FROM gtfs_etl_log
-    ORDER BY etl_id DESC
-    LIMIT 5;
+    SELECT gtfs_etl_to_operational(${CLEAR_STAGING});
 SQL
 
 echo

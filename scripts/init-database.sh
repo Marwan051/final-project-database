@@ -1,5 +1,5 @@
 #!/bin/bash
-set -e
+set -euo pipefail
 
 echo "Setting up database with PostGIS and pgRouting..."
 
@@ -15,9 +15,5 @@ psql -v ON_ERROR_STOP=1 <<-EOSQL
 EOSQL
 
 echo "Extensions created successfully"
-
-# Apply custom schema
-echo "Applying custom schema..."
-psql -v ON_ERROR_STOP=1 -f /docker-entrypoint-initdb.d/02-schema.sql
 
 echo "Database setup complete!"
