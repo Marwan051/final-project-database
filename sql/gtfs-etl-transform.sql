@@ -2,6 +2,7 @@ CREATE OR REPLACE FUNCTION gtfs_etl_to_operational(p_clear_staging BOOLEAN DEFAU
 DECLARE v_stops_inserted INT := 0;
 v_routes_inserted INT := 0;
 v_route_geom_inserted INT := 0;
+v_trips_inserted INT := 0;
 v_route_stops_inserted INT := 0;
 BEGIN -- 1. operational "stop" table
 RAISE NOTICE 'ETL Step 1: Transforming stops...';
@@ -147,48 +148,79 @@ SELECT COUNT(*) INTO v_route_geom_inserted
 FROM inserted;
 RAISE NOTICE 'Inserted % route geometries',
 v_route_geom_inserted;
--- 4. operational route_stop table
-RAISE NOTICE 'ETL Step 4: Transforming route stops...';
-WITH trip_stops AS (
-    SELECT DISTINCT ON (r.route_id, st.stop_sequence) r.route_id,
-        s.stop_id,
-        st.stop_sequence,
-        st.arrival_time,
-        st.departure_time
-    FROM gtfs_staging_stop_times st
-        JOIN gtfs_staging_trips t ON st.trip_id = t.trip_id
-        AND st.feed_id = t.feed_id
+-- 4. operational trip table
+RAISE NOTICE 'ETL Step 4: Transforming trips...';
+WITH inserted AS (
+    INSERT INTO trip (
+            route_id,
+            feed_id,
+            gtfs_trip_id,
+            route_geom_id,
+            headsign,
+            direction_id,
+            service_id,
+            attrs
+        )
+    SELECT r.route_id,
+        t.feed_id,
+        t.trip_id AS gtfs_trip_id,
+        rg.route_geom_id,
+        t.trip_headsign AS headsign,
+        t.direction_id,
+        t.service_id,
+        jsonb_build_object(
+            'source',
+            'gtfs',
+            'shape_id',
+            t.shape_id
+        ) AS attrs
+    FROM gtfs_staging_trips t
         JOIN "route" r ON r.gtfs_route_id = t.route_id
         AND r.feed_id = t.feed_id
-        JOIN "stop" s ON s.gtfs_stop_id = st.stop_id
-        AND s.feed_id = st.feed_id
-    WHERE st.arrival_time IS NOT NULL
-    ORDER BY r.route_id,
-        st.stop_sequence,
-        st.arrival_time
-),
-inserted AS (
+        LEFT JOIN route_geometry rg ON rg.route_id = r.route_id
+        AND rg.attrs->>'shape_id' = t.shape_id
+    WHERE t.trip_id IS NOT NULL ON CONFLICT (feed_id, gtfs_trip_id) DO
+    UPDATE
+    SET headsign = EXCLUDED.headsign,
+        direction_id = EXCLUDED.direction_id,
+        service_id = EXCLUDED.service_id,
+        route_geom_id = EXCLUDED.route_geom_id,
+        attrs = trip.attrs || EXCLUDED.attrs
+    RETURNING 1
+)
+SELECT COUNT(*) INTO v_trips_inserted
+FROM inserted;
+RAISE NOTICE 'Inserted/Updated % trips',
+v_trips_inserted;
+-- 5. operational route_stop table
+RAISE NOTICE 'ETL Step 5: Transforming route stops...';
+WITH inserted AS (
     INSERT INTO route_stop (
-            route_id,
+            trip_id,
             stop_id,
             stop_sequence,
             arrival_time,
             departure_time,
             attrs
         )
-    SELECT ts.route_id,
-        ts.stop_id,
-        ts.stop_sequence,
+    SELECT t.trip_id,
+        s.stop_id,
+        st.stop_sequence,
         CASE
-            WHEN ts.arrival_time ~ '^\d{1,2}:\d{2}:\d{2}$' THEN ts.arrival_time::TIME
+            WHEN st.arrival_time ~ '^\d{1,2}:\d{2}:\d{2}$' THEN st.arrival_time::TIME
             ELSE NULL
         END,
         CASE
-            WHEN ts.departure_time ~ '^\d{1,2}:\d{2}:\d{2}$' THEN ts.departure_time::TIME
+            WHEN st.departure_time ~ '^\d{1,2}:\d{2}:\d{2}$' THEN st.departure_time::TIME
             ELSE NULL
         END,
         jsonb_build_object('source', 'gtfs') AS attrs
-    FROM trip_stops ts ON CONFLICT (route_id, stop_sequence) DO
+    FROM gtfs_staging_stop_times st
+        JOIN trip t ON t.gtfs_trip_id = st.trip_id
+        AND t.feed_id = st.feed_id
+        JOIN "stop" s ON s.gtfs_stop_id = st.stop_id
+        AND s.feed_id = st.feed_id
+    WHERE st.arrival_time IS NOT NULL ON CONFLICT (trip_id, stop_sequence) DO
     UPDATE
     SET arrival_time = EXCLUDED.arrival_time,
         departure_time = EXCLUDED.departure_time
@@ -203,6 +235,7 @@ RAISE NOTICE 'Analyzing tables for query optimization...';
 ANALYZE "route";
 ANALYZE "stop";
 ANALYZE route_geometry;
+ANALYZE trip;
 ANALYZE route_stop;
 -- clear staging tables
 IF p_clear_staging THEN RAISE NOTICE 'Clearing staging tables...';
@@ -215,10 +248,11 @@ gtfs_staging_agency,
 gtfs_staging_calendar,
 gtfs_staging_feed_info;
 END IF;
-RAISE NOTICE 'ETL completed: % stops, % routes, % geometries, % route_stops',
+RAISE NOTICE 'ETL completed: % stops, % routes, % geometries, % trips, % route_stops',
 v_stops_inserted,
 v_routes_inserted,
 v_route_geom_inserted,
+v_trips_inserted,
 v_route_stops_inserted;
 END;
 $$;

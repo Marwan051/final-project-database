@@ -52,7 +52,29 @@ $$;
 DROP TRIGGER IF EXISTS route_geometry_sync_proj ON route_geometry;
 CREATE TRIGGER route_geometry_sync_proj BEFORE
 INSERT ON route_geometry FOR EACH ROW EXECUTE FUNCTION trg_route_geometry_sync_proj();
--- 3) stop table; The stop itself ex: san stefano station
+-- 3) trip table - represents specific scheduled trips on a route
+CREATE TABLE IF NOT EXISTS trip (
+    trip_id BIGSERIAL PRIMARY KEY,
+    route_id BIGINT NOT NULL REFERENCES "route"(route_id) ON DELETE CASCADE,
+    feed_id TEXT,
+    gtfs_trip_id TEXT,
+    -- original GTFS trip_id
+    route_geom_id BIGINT REFERENCES route_geometry(route_geom_id) ON DELETE
+    SET NULL,
+        headsign TEXT,
+        -- destination sign, ex: "Raml Station"
+        direction_id SMALLINT,
+        -- 0 or 1 for opposite directions
+        service_id TEXT,
+        -- links to calendar/service patterns
+        attrs JSONB DEFAULT '{}'::jsonb,
+        created_at TIMESTAMPTZ DEFAULT now(),
+        UNIQUE (feed_id, gtfs_trip_id)
+);
+CREATE INDEX IF NOT EXISTS idx_trip_route_id ON trip(route_id);
+CREATE INDEX IF NOT EXISTS idx_trip_route_geom_id ON trip(route_geom_id);
+CREATE INDEX IF NOT EXISTS idx_trip_attrs_gin ON trip USING GIN (attrs);
+-- 4) stop table; The stop itself ex: san stefano station
 CREATE TABLE IF NOT EXISTS "stop" (
     stop_id BIGSERIAL PRIMARY KEY,
     feed_id TEXT,
@@ -84,20 +106,20 @@ $$;
 DROP TRIGGER IF EXISTS stop_sync_proj ON "stop";
 CREATE TRIGGER stop_sync_proj BEFORE
 INSERT ON "stop" FOR EACH ROW EXECUTE FUNCTION trg_stop_sync_proj();
--- 4) route_stop, actual stop in route ex : san stefano station tram 1
+-- 5) route_stop, actual stop in trip ex : san stefano station trip 1
 CREATE TABLE IF NOT EXISTS route_stop (
     route_stop_id BIGSERIAL PRIMARY KEY,
-    route_id BIGINT NOT NULL REFERENCES "route"(route_id) ON DELETE CASCADE,
+    trip_id BIGINT NOT NULL REFERENCES trip(trip_id) ON DELETE CASCADE,
     stop_id BIGINT NOT NULL REFERENCES "stop"(stop_id) ON DELETE CASCADE,
     stop_sequence INTEGER NOT NULL,
-    -- the numbering of the stop in the route, ex : san stefano: 1, ganaklis: 2
+    -- the numbering of the stop in the trip, ex : san stefano: 1, ganaklis: 2
     arrival_time TIME,
     departure_time TIME,
     attrs JSONB DEFAULT '{}'::jsonb,
     created_at TIMESTAMPTZ DEFAULT now(),
-    UNIQUE (route_id, stop_sequence)
+    UNIQUE (trip_id, stop_sequence)
 );
 -- Indexes for route stops table
-CREATE INDEX IF NOT EXISTS idx_route_stop_routeid_seq ON route_stop (route_id, stop_sequence);
+CREATE INDEX IF NOT EXISTS idx_route_stop_tripid_seq ON route_stop (trip_id, stop_sequence);
 CREATE INDEX IF NOT EXISTS idx_route_stop_stopid ON route_stop (stop_id);
 CREATE INDEX IF NOT EXISTS idx_route_stop_attrs_gin ON route_stop USING GIN (attrs);

@@ -1,9 +1,3 @@
-#!/usr/bin/env bash
-# common.sh - Shared database connection setup for Docker environment
-#
-# Source this file in your scripts to set up database connection variables
-# Usage: source /usr/local/bin/common.sh
-
 # Exit on error
 set -euo pipefail
 

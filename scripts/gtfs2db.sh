@@ -1,12 +1,3 @@
-#!/usr/bin/env bash
-# gtfs2db.sh - Import GTFS data into PostgreSQL and transform to operational schema
-#
-# Usage:
-#   ./gtfs2db.sh
-#
-# Environment variables:
-#   GTFS_DIR (default: /gtfs-data)
-
 # Source common database setup
 source /usr/local/bin/common.sh
 
