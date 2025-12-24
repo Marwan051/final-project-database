@@ -22,7 +22,7 @@ CREATE TABLE IF NOT EXISTS "route" (
     created_at TIMESTAMPTZ DEFAULT now(),
     UNIQUE (feed_id, gtfs_route_id)
 );
-CREATE INDEX IF NOT EXISTS idx_route_feed_id ON "route"(feed_id);
+CREATE INDEX IF NOT EXISTS idx_gtfs_route_id ON "route"(gtfs_route_id);
 CREATE INDEX IF NOT EXISTS idx_route_continuous_pickup ON "route"(continuous_pickup);
 CREATE INDEX IF NOT EXISTS idx_route_continuous_drop_off ON "route"(continuous_drop_off);
 CREATE INDEX IF NOT EXISTS idx_route_attrs_gin ON "route" USING GIN (attrs);
@@ -72,6 +72,7 @@ CREATE TABLE IF NOT EXISTS trip (
         UNIQUE (feed_id, gtfs_trip_id)
 );
 CREATE INDEX IF NOT EXISTS idx_trip_route_id ON trip(route_id);
+CREATE INDEX IF NOT EXISTS idx_trip_id_gtfs ON trip(gtfs_trip_id);
 CREATE INDEX IF NOT EXISTS idx_trip_route_geom_id ON trip(route_geom_id);
 CREATE INDEX IF NOT EXISTS idx_trip_attrs_gin ON trip USING GIN (attrs);
 -- 4) stop table; The stop itself ex: san stefano station
